@@ -3,7 +3,7 @@ version: '3.8'
 services:
   db:
     image: postgres:15-alpine
-    container_name: datapulse_db
+    container_name: db
     restart: always
     environment:
       POSTGRES_DB: datapulse_db
@@ -16,7 +16,7 @@ services:
 
   web:
     build: .
-    container_name: datapulse_backend
+    container_name: backend
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/app
@@ -26,8 +26,8 @@ services:
       - db
     environment:
       - DEBUG=True
-      - SECRET_KEY=django-insecure-tu_clave_secreta_aqui
-      - DATABASE_URL=postgres://datapulse_user:datapulse_password@db:5432/datapulse_db
+      - SECRET_KEY=django-insecure-<clave segura>
+      - DATABASE_URL=postgres://user:password@db:port/db_name
 
 volumes:
   postgres_data:
