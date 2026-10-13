@@ -6,8 +6,10 @@ from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiPara
 from .models import Country, EconomicIndicator, ExchangeRate
 from .serializers import CountrySerializer, EconomicIndicatorSerializer, ExchangeRateSerializer
 from .services import DataSyncService
+
 from drf_spectacular.types import OpenApiTypes
 
+from core.pagination import StandardResultsSetPagination
 
 @extend_schema_view(
     list=extend_schema(summary="Listar países", description="Listar paises (con filtros por region)"),
@@ -17,6 +19,7 @@ from drf_spectacular.types import OpenApiTypes
 class CountryViewSet(viewsets.ModelViewSet):
     queryset = Country.objects.all()
     serializer_class = CountrySerializer
+    pagination_class = StandardResultsSetPagination
     permission_classes = [IsAuthenticated]
 
     @extend_schema(summary="Indicadores de un país", description="Indicadores de un pais (filtro por tipo, anio)")

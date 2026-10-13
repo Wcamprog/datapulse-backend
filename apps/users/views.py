@@ -1,7 +1,12 @@
-from rest_framework import generics, permissions
 from django.contrib.auth import get_user_model
 from drf_spectacular.utils import extend_schema
-from .serializers import UserSerializer, RegisterSerializer
+from rest_framework import generics, permissions, viewsets
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.views import TokenObtainPairView
+
+from core.pagination import StandardResultsSetPagination
+from .serializers import AdminUserManageSerializer, CustomTokenObtainPairSerializer, UserSerializer, RegisterSerializer
+from .permissions import EsAdminOSuperusuario
 
 User = get_user_model()
 
@@ -29,3 +34,14 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     @extend_schema(exclude=True)
     def patch(self, request, *args, **kwargs):
         return super().patch(request, *args, **kwargs)
+
+@extend_schema(exclude=True, tags=['Administración de Usuarios'])
+class UserManagementViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all().order_by('-fecha_creacion')
+    serializer_class = AdminUserManageSerializer
+    permission_classes = [IsAuthenticated, EsAdminOSuperusuario]
+    pagination_class = StandardResultsSetPagination
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer

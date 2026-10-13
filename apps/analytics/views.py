@@ -25,10 +25,19 @@ class IndiceRiesgoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     lookup_field = 'pais__codigo_iso'
 
-    @extend_schema(summary="Histórico de riesgo", description="Historico de indices (filtro por rango)")
-    @action(detail=True, methods=['get'])
-    def historico(self, request, pais__codigo_iso=None):
-        return Response({"mensaje": "Endpoint histórico preparado"})
+    @extend_schema(summary="Histórico de riesgo", description="Histórico de índices para un país por código ISO")
+    @action(detail=False, methods=['get'], url_path='historico/(?P<codigo_iso>[^/.]+)')
+    def historico(self, request, codigo_iso=None):
+        """
+        Retorna todos los cálculos de riesgo históricos para el país especificado
+        ordenados desde el más reciente al más antiguo.
+        """
+        registros = IndiceRiesgo.objects.filter(
+            pais__codigo_iso__iexact=codigo_iso
+        ).order_by('-fecha_calculo')
+
+        serializer = self.get_serializer(registros, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
         summary="Recalcular índices",

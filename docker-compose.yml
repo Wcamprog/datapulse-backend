@@ -29,7 +29,7 @@ services:
     environment:
       - DEBUG=True
       - SECRET_KEY=django-insecure-<clave segura>
-      - DATABASE_URL=postgres://user:password@db:port/db_name
+      - DATABASE_URL=DATABASE_URL
 
 volumes:
   postgres_data:
