@@ -1,31 +1,37 @@
 import datetime
 import math
 from django.db import transaction
+from django.contrib.auth import get_user_model
 from apps.countries.models import Country, EconomicIndicator, ExchangeRate
-from .models import IndiceRiesgo
 
+from .models import IndiceRiesgo, Alerta
 
+User = get_user_model()
 class RiskCalculationService:
 
     @classmethod
     def calculate_all_indices(cls):
         paises_activos = Country.objects.filter(activo=True)
+        usuarios_activos = User.objects.filter(is_active=True)
         registros_creados = 0
+
+        alertas_a_crear = []
 
         with transaction.atomic():
             for pais in paises_activos:
+                ultimo_calculo = IndiceRiesgo.objects.filter(pais=pais).order_by('-fecha_calculo', '-id').first()
+
                 score_eco = cls._calcular_score_economico(pais)
                 score_camb = cls._calcular_score_cambiario(pais)
                 score_estabilidad = cls._calcular_score_estabilidad(pais)
 
-                indice_compuesto = round( (score_eco * 0.40) + (score_camb * 0.30) + (score_estabilidad * 0.30), 2 )
-
+                indice_compuesto = round((score_eco * 0.40) + (score_camb * 0.30) + (score_estabilidad * 0.30), 2)
                 nivel = cls._determinar_nivel(indice_compuesto)
 
                 detalle = {
-                    "score_economico": score_eco,
-                    "score_cambiario": score_camb,
-                    "score_estabilidad": score_estabilidad,
+                    "score_economico": float(score_eco),
+                    "score_cambiario": float(score_camb),
+                    "score_estabilidad": float(score_estabilidad),
                     "explicacion": "Cálculo basado en reglas de penalización oficiales"
                 }
 
@@ -41,13 +47,46 @@ class RiskCalculationService:
                 )
                 registros_creados += 1
 
-        return True, f"Se calcularon y guardaron los índices de riesgo exactos para {registros_creados} países."
+
+                if indice_compuesto < 25.0:
+                    for user in usuarios_activos:
+                        alertas_a_crear.append(
+                            Alerta(
+                                usuario=user,
+                                pais=pais,
+                                tipo_alerta='RIESGO',
+                                severidad='CRITICAL',
+                                titulo=f'Riesgo Crítico: {pais.nombre}',
+                                mensaje=f'El Índice de Riesgo (IRPC) de {pais.nombre} ha caído a un nivel CRÍTICO ({indice_compuesto} pts).'
+                            )
+                        )
+
+                elif ultimo_calculo and ultimo_calculo.indice_compuesto:
+                    variacion = float(ultimo_calculo.indice_compuesto) - float(indice_compuesto)
+                    if variacion > 15.0:
+                        for user in usuarios_activos:
+                            alertas_a_crear.append(
+                                Alerta(
+                                    usuario=user,
+                                    pais=pais,
+                                    tipo_alerta='RIESGO',
+                                    severidad='WARNING',
+                                    titulo=f'Caída severa de IRPC: {pais.nombre}',
+                                    mensaje=f'El índice cayó {round(variacion, 2)} puntos abruptamente. Anterior: {ultimo_calculo.indice_compuesto}, Actual: {indice_compuesto}.'
+                                )
+                            )
+
+            if alertas_a_crear:
+                Alerta.objects.bulk_create(alertas_a_crear)
+
+        return True, f"Se calcularon los índices para {registros_creados} países y se generaron {len(alertas_a_crear)} alertas individuales."
 
     @classmethod
     def _obtener_ultimo_indicador(cls, pais, tipo):
-        """Función auxiliar para traer el último valor del Banco Mundial"""
-        ind = EconomicIndicator.objects.filter(pais=pais, tipo=tipo).order_by('-anio').first()
-        return ind.valor if ind else None
+        indicador = EconomicIndicator.objects.filter( pais=pais, tipo=tipo ).order_by('-anio').first()
+        if indicador and indicador.valor is not None:
+            return float(indicador.valor)
+        return None
 
     @classmethod
     def _calcular_score_economico(cls, pais):

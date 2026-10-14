@@ -6,6 +6,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
+from django.db.models import Count, Q
+from django_filters.rest_framework import DjangoFilterBackend
+
+from core.pagination import StandardResultsSetPagination
 from .models import IndiceRiesgo, Alerta
 from .serializers import IndiceRiesgoSerializer, AlertaSerializer
 from .services import RiskCalculationService
@@ -63,9 +67,14 @@ class IndiceRiesgoViewSet(viewsets.ModelViewSet):
 class AlertaViewSet(viewsets.ModelViewSet):
     serializer_class = AlertaSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['tipo_alerta', 'severidad', 'leida']
 
     def get_queryset(self):
-        return Alerta.objects.filter(usuario=self.request.user)
+        return Alerta.objects.filter(
+            usuario=self.request.user
+        )
 
     @extend_schema(summary="Marcar como leída", description="Marcar como leida")
     @action(detail=True, methods=['put'])
@@ -81,10 +90,34 @@ class AlertaViewSet(viewsets.ModelViewSet):
         Alerta.objects.filter(usuario=self.request.user, leida=False).update(leida=True)
         return Response({"mensaje": "Todas las alertas marcadas como leídas"})
 
-    @extend_schema(summary="Resumen de alertas", description="Conteo por tipo y severidad")
+    @extend_schema(
+        summary="Resumen de alertas",
+        description="Conteo de alertas por tipo y severidad"
+    )
     @action(detail=False, methods=['get'])
     def resumen(self, request):
-        return Response({"mensaje": "Endpoint resumen alertas preparado"})
+        queryset = self.get_queryset()
+
+        totales = queryset.aggregate(
+            total=Count('id'),
+            leidas=Count('id', filter=Q(leida=True)),
+            no_leidas=Count('id', filter=Q(leida=False))
+        )
+
+        severidades = queryset.values('severidad').annotate( total=Count('id'))
+        tipos = queryset.values('tipo').annotate(total=Count('id') )
+
+        return Response({
+            **totales,
+            "por_severidad": {
+                item['severidad']: item['total']
+                for item in severidades
+            },
+            "por_tipo": {
+                item['tipo']: item['total']
+                for item in tipos
+            }
+        })
 
 
 class DashboardViewSet(viewsets.ViewSet):

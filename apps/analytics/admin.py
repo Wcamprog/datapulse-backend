@@ -1,3 +1,5 @@
 from django.contrib import admin
+from .models import IndiceRiesgo, Alerta
 
-# Register your models here.
+admin.site.register(IndiceRiesgo)
+admin.site.register(Alerta)
