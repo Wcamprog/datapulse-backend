@@ -39,7 +39,7 @@ class Posicion(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=Q(fecha_salida__isnull=True) | Q(fecha_salida__gt=F('fecha_entrada')),
+                check=Q(fecha_salida__isnull=True) | Q(fecha_salida__gte=F('fecha_entrada')),
                 name='check_fecha_salida_mayor_entrada'
             )
         ]

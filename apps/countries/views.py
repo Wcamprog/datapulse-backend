@@ -7,6 +7,8 @@ from .models import Country, EconomicIndicator, ExchangeRate
 from .serializers import CountrySerializer, EconomicIndicatorSerializer, ExchangeRateSerializer
 from .services import DataSyncService
 
+from apps.analytics.tasks import task_sincronizar_indicadores
+
 from drf_spectacular.types import OpenApiTypes
 
 from core.pagination import StandardResultsSetPagination
@@ -38,20 +40,12 @@ class CountryViewSet(viewsets.ModelViewSet):
         serializer = ExchangeRateSerializer(tasas, many=True)
         return Response(serializer.data)
 
-    @extend_schema(
-        summary="Sincronizar indicadores",
-        description="Disparar sincronización desde APIs externas (solo ADMIN)",
-        request=None,
-        responses={200: OpenApiTypes.OBJECT}
-    )
+
+    @extend_schema(summary="Sincronizar indicadores", description="Disparar sincronización asíncrona en segundo plano")
     @action(detail=False, methods=['post'], url_path='sync-indicadores', permission_classes=[IsAdminUser])
     def sync_indicadores(self, request):
-        exito, mensaje = DataSyncService.sync_all()
-
-        if exito:
-            return Response({"mensaje": mensaje}, status=status.HTTP_200_OK)
-        else:
-            return Response({"error": mensaje}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        task_sincronizar_indicadores.delay()
+        return Response({"mensaje": "Sincronización en segundo plano iniciada correctamente."}, status=202)
 
     @extend_schema(
         summary="Consultar datos de país externo",

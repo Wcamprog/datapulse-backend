@@ -1,5 +1,5 @@
 import datetime, io
-
+from django.utils import timezone
 from django.http import FileResponse
 from django.db.models import Sum, Count
 from reportlab.pdfgen import canvas
@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from drf_spectacular.utils import extend_schema, extend_schema_view
 
+from core.pagination import StandardResultsSetPagination
 from .models import Portafolio, Posicion
 from .serializers import PortafolioSerializer, PosicionSerializer
 
@@ -27,6 +28,7 @@ from .serializers import PortafolioSerializer, PosicionSerializer
 class PortafolioViewSet(viewsets.ModelViewSet):
     serializer_class = PortafolioSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         return Portafolio.objects.filter(usuario=self.request.user) | Portafolio.objects.filter(es_publico=True)
@@ -67,9 +69,31 @@ class PortafolioViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         elif request.method == 'DELETE':
-            posicion.fecha_salida = datetime.date.today()
-            posicion.save()
-            return Response({"mensaje": "Posición cerrada exitosamente"}, status=status.HTTP_200_OK)
+            if posicion.fecha_salida is not None:
+                return Response(
+                    {"error": f"La posición ya fue cerrada previamente el {posicion.fecha_salida}."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            hoy = timezone.localdate()
+
+            if hoy < posicion.fecha_entrada:
+                return Response(
+                    {
+                        "error": f"No se puede cerrar la posición: la fecha de entrada ({posicion.fecha_entrada}) es posterior a la fecha actual ({hoy})."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                posicion.fecha_salida = hoy
+                posicion.save()
+                return Response({"mensaje": "Posición cerrada exitosamente"}, status=status.HTTP_200_OK)
+            except Exception as e:
+                return Response(
+                    {"error": f"Error de integridad al cerrar la posición: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
     @extend_schema(summary="Resumen del portafolio", description="Resumen: distribucion por pais, tipo_activo, riesgo")
     @action(detail=True, methods=['get'], url_path='resumen')
